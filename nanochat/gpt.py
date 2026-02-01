@@ -352,11 +352,31 @@ class GPT(nn.Module):
         return self.transformer.wte.weight.device
 
     def estimate_flops(self):
-        """ Return the estimated FLOPs per token for the model. Ref: https://arxiv.org/abs/2204.02311 """
-        nparams = sum(p.numel() for p in self.parameters())
-        nparams_embedding = self.transformer.wte.weight.numel()
+        """
+        Return the estimated FLOPs per token for the model. Ref: https://arxiv.org/abs/2204.02311
+        For MoE models, we account for sparsity: only num_experts_per_tok experts are activated.
+        """
         l, h, q, t = self.config.n_layer, self.config.n_head, self.config.n_embd // self.config.n_head, self.config.sequence_len
-        num_flops_per_token = 6 * (nparams - nparams_embedding) + 12 * l * h * q * t
+        nparams_embedding = self.transformer.wte.weight.numel()
+        nparams_lm_head = self.lm_head.weight.numel()
+
+        if self.config.num_experts > 1:
+            # MoE model: count active parameters (attention + activated experts)
+            # Attention params per layer
+            attn_params_per_layer = sum(p.numel() for p in self.transformer.h[0].attn.parameters())
+            # Expert MLP params per expert
+            expert_params = sum(p.numel() for p in self.transformer.h[0].moe.experts[0].parameters())
+            # Router params per layer (small, negligible but include for completeness)
+            router_params = sum(p.numel() for p in self.transformer.h[0].moe.router.parameters())
+            # Active params per layer = attention + (activated experts * expert params) + router
+            active_params_per_layer = attn_params_per_layer + (self.config.num_experts_per_tok * expert_params) + router_params
+            nparams_active = l * active_params_per_layer + nparams_lm_head
+            num_flops_per_token = 6 * nparams_active + 12 * l * h * q * t
+        else:
+            # Dense model: original calculation
+            nparams = sum(p.numel() for p in self.parameters())
+            num_flops_per_token = 6 * (nparams - nparams_embedding) + 12 * l * h * q * t
+
         return num_flops_per_token
 
     def setup_optimizers(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0, router_lr=0.01):
