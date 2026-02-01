@@ -257,7 +257,21 @@ class Block(nn.Module):
     def forward(self, x, cos_sin, kv_cache):
         x = x + self.attn(norm(x), cos_sin, kv_cache)
         x = x + self.mlp(norm(x))
-        return x
+        return x, torch.tensor(0.0, device=x.device)  # No aux loss for dense block
+
+
+class MoEBlock(nn.Module):
+    """Transformer block with Mixture of Experts instead of standard MLP."""
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        self.attn = CausalSelfAttention(config, layer_idx)
+        self.moe = SparseMoE(config)
+
+    def forward(self, x, cos_sin, kv_cache):
+        x = x + self.attn(norm(x), cos_sin, kv_cache)
+        moe_out, aux_loss = self.moe(norm(x))
+        x = x + moe_out
+        return x, aux_loss
 
 
 class GPT(nn.Module):
