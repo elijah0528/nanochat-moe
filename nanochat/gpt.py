@@ -127,6 +127,57 @@ class MLP(nn.Module):
         return x
 
 
+class Router(nn.Module):
+    """
+    Routes tokens to top-k experts with load balancing auxiliary loss.
+    Returns router weights and auxiliary loss for load balancing.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.gate = nn.Linear(config.n_embd, config.num_experts, bias=False)
+
+    def forward(self, x):
+        # x: (B, T, C) -> router_logits: (B, T, num_experts)
+        router_logits = self.gate(x)
+        router_probs = F.softmax(router_logits, dim=-1)
+
+        # Select top-k experts per token
+        top_k_probs, top_k_indices = torch.topk(router_probs, self.num_experts_per_tok, dim=-1)
+        # Normalize the top-k probabilities to sum to 1
+        top_k_probs = top_k_probs / top_k_probs.sum(dim=-1, keepdim=True)
+
+        # Compute auxiliary load balancing loss
+        # This encourages balanced expert utilization
+        # aux_loss = num_experts * sum_i(f_i * P_i) where:
+        #   f_i = fraction of tokens routed to expert i
+        #   P_i = average probability assigned to expert i
+        if self.training:
+            # f_i: fraction of tokens where expert i is in top-k
+            # We use a soft version: sum of top-k indicator / total tokens
+            B, T, _ = x.shape
+            num_tokens = B * T
+
+            # Create expert mask: (B, T, num_experts) with 1s where expert is selected
+            expert_mask = torch.zeros_like(router_probs)
+            expert_mask.scatter_(-1, top_k_indices, 1.0)
+
+            # f_i = mean of expert_mask over all tokens for each expert
+            tokens_per_expert = expert_mask.sum(dim=(0, 1))  # (num_experts,)
+            f = tokens_per_expert / num_tokens  # fraction of tokens per expert
+
+            # P_i = mean router probability for each expert
+            P = router_probs.mean(dim=(0, 1))  # (num_experts,)
+
+            # Auxiliary loss: encourages f and P to be uniform (1/num_experts each)
+            aux_loss = self.num_experts * (f * P).sum()
+        else:
+            aux_loss = torch.tensor(0.0, device=x.device)
+
+        return top_k_probs, top_k_indices, aux_loss
+
+
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
