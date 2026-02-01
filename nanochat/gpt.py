@@ -299,10 +299,18 @@ class GPT(nn.Module):
         self.apply(self._init_weights)
         # zero out classifier weights
         torch.nn.init.zeros_(self.lm_head.weight)
-        # zero out c_proj weights in all blocks
+        # zero out c_proj weights in all blocks (handles both dense and MoE)
         for block in self.transformer.h:
-            torch.nn.init.zeros_(block.mlp.c_proj.weight)
             torch.nn.init.zeros_(block.attn.c_proj.weight)
+            if self.config.num_experts > 1:
+                # MoE block: zero out c_proj for all experts
+                for expert in block.moe.experts:
+                    torch.nn.init.zeros_(expert.c_proj.weight)
+                # Initialize router with small variance for balanced initial routing
+                torch.nn.init.normal_(block.moe.router.gate.weight, mean=0.0, std=0.01)
+            else:
+                # Dense block
+                torch.nn.init.zeros_(block.mlp.c_proj.weight)
         # init the rotary embeddings
         head_dim = self.config.n_embd // self.config.n_head
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
@@ -351,15 +359,30 @@ class GPT(nn.Module):
         num_flops_per_token = 6 * (nparams - nparams_embedding) + 12 * l * h * q * t
         return num_flops_per_token
 
-    def setup_optimizers(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0):
+    def setup_optimizers(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0, router_lr=0.01):
         model_dim = self.config.n_embd
         ddp, rank, local_rank, world_size = get_dist_info()
-        # Separate out all parameters into 3 groups (matrix, embedding, lm_head)
-        matrix_params = list(self.transformer.h.parameters())
+        # Separate out all parameters into groups
+        # For MoE: router params go with AdamW, expert MLP params go with Muon
+        matrix_params = []
+        router_params = []
+        for block in self.transformer.h:
+            # Attention params always go to Muon
+            matrix_params.extend(list(block.attn.parameters()))
+            if self.config.num_experts > 1:
+                # MoE block: router to AdamW, experts to Muon
+                router_params.extend(list(block.moe.router.parameters()))
+                for expert in block.moe.experts:
+                    matrix_params.extend(list(expert.parameters()))
+            else:
+                # Dense block: MLP to Muon
+                matrix_params.extend(list(block.mlp.parameters()))
         embedding_params = list(self.transformer.wte.parameters())
         lm_head_params = list(self.lm_head.parameters())
-        assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params)
-        # Create the AdamW optimizer for the embedding and lm_head
+        # Verify we haven't missed any parameters
+        total_param_count = len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(router_params)
+        assert len(list(self.parameters())) == total_param_count, f"Parameter count mismatch: {len(list(self.parameters()))} != {total_param_count}"
+        # Create the AdamW optimizer for the embedding, lm_head, and router (if MoE)
         # Scale the LR for the AdamW parameters by ∝1/√dmodel (having tuned the LRs for 768 dim model)
         dmodel_lr_scale = (model_dim / 768) ** -0.5
         if rank == 0:
@@ -368,6 +391,9 @@ class GPT(nn.Module):
             dict(params=lm_head_params, lr=unembedding_lr * dmodel_lr_scale),
             dict(params=embedding_params, lr=embedding_lr * dmodel_lr_scale),
         ]
+        # Add router params to AdamW if MoE is enabled
+        if router_params:
+            adam_groups.append(dict(params=router_params, lr=router_lr * dmodel_lr_scale))
         adamw_kwargs = dict(betas=(0.8, 0.95), eps=1e-10, weight_decay=weight_decay)
         AdamWFactory = DistAdamW if ddp else partial(torch.optim.AdamW, fused=True)
         adamw_optimizer = AdamWFactory(adam_groups, **adamw_kwargs)
