@@ -408,6 +408,45 @@ async def stats():
         ]
     }
 
+@app.get("/info")
+async def info():
+    """Get model information for UI display."""
+    worker_pool = app.state.worker_pool
+    if not worker_pool or not worker_pool.workers:
+        return {"error": "No workers available"}
+
+    # Get model config from first worker
+    worker = worker_pool.workers[0]
+    model = worker.engine.model
+    config = model.config
+
+    # Calculate total parameters
+    num_params = sum(p.numel() for p in model.parameters())
+
+    # Determine model type
+    is_moe = config.num_experts > 1
+    model_type = f"MoE ({config.num_experts} experts)" if is_moe else "Dense"
+
+    return {
+        "model_type": model_type,
+        "num_params": num_params,
+        "num_params_str": f"{num_params / 1e6:.1f}M" if num_params < 1e9 else f"{num_params / 1e9:.2f}B",
+        "n_layer": config.n_layer,
+        "n_head": config.n_head,
+        "n_embd": config.n_embd,
+        "sequence_len": config.sequence_len,
+        "vocab_size": config.vocab_size,
+        # MoE specific
+        "is_moe": is_moe,
+        "num_experts": config.num_experts if is_moe else None,
+        "num_experts_per_tok": config.num_experts_per_tok if is_moe else None,
+        # Server settings
+        "source": args.source,
+        "default_temperature": args.temperature,
+        "default_top_k": args.top_k,
+        "default_max_tokens": args.max_tokens,
+    }
+
 if __name__ == "__main__":
     import uvicorn
     print(f"Starting NanoChat Web Server")

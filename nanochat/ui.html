@@ -8,6 +8,48 @@
     <style>
         :root {
             color-scheme: light;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f3f4f6;
+            --bg-tertiary: #e5e7eb;
+            --text-primary: #111827;
+            --text-secondary: #374151;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --border-hover: #d1d5db;
+            --accent-color: #111827;
+            --accent-hover: #2563eb;
+            --error-bg: #fee2e2;
+            --error-border: #fecaca;
+            --error-text: #b91c1c;
+            --badge-bg: #dbeafe;
+            --badge-text: #1e40af;
+            --badge-moe-bg: #fef3c7;
+            --badge-moe-text: #92400e;
+            --overlay-bg: rgba(0, 0, 0, 0.5);
+            --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        :root.dark {
+            color-scheme: dark;
+            --bg-primary: #111827;
+            --bg-secondary: #1f2937;
+            --bg-tertiary: #374151;
+            --text-primary: #f9fafb;
+            --text-secondary: #e5e7eb;
+            --text-muted: #9ca3af;
+            --border-color: #374151;
+            --border-hover: #4b5563;
+            --accent-color: #f9fafb;
+            --accent-hover: #3b82f6;
+            --error-bg: #450a0a;
+            --error-border: #7f1d1d;
+            --error-text: #fca5a5;
+            --badge-bg: #1e3a5f;
+            --badge-text: #93c5fd;
+            --badge-moe-bg: #451a03;
+            --badge-moe-text: #fcd34d;
+            --overlay-bg: rgba(0, 0, 0, 0.7);
+            --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
         * {
@@ -16,23 +58,34 @@
 
         body {
             font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
-            background-color: #ffffff;
-            color: #111827;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100dvh;
             margin: 0;
             display: flex;
             flex-direction: column;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
         .header {
-            background-color: #ffffff;
+            background-color: var(--bg-primary);
             padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s ease;
         }
 
         .header-left {
             display: flex;
             align-items: center;
             gap: 0.75rem;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
 
         .header-logo {
@@ -44,17 +97,43 @@
             font-size: 1.25rem;
             font-weight: 600;
             margin: 0;
-            color: #111827;
+            color: var(--text-primary);
         }
 
-        .new-conversation-btn {
+        .model-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background-color: var(--bg-secondary);
+            padding: 0.375rem 0.75rem;
+            border-radius: 1rem;
+            transition: background-color 0.2s ease;
+        }
+
+        .model-info-badge {
+            background-color: var(--badge-bg);
+            color: var(--badge-text);
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.75rem;
+            font-weight: 500;
+        }
+
+        .model-info-badge.moe {
+            background-color: var(--badge-moe-bg);
+            color: var(--badge-moe-text);
+        }
+
+        .new-conversation-btn,
+        .theme-toggle-btn {
             width: 32px;
             height: 32px;
             padding: 0;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border-color);
             border-radius: 0.5rem;
-            background-color: #ffffff;
-            color: #6b7280;
+            background-color: var(--bg-primary);
+            color: var(--text-muted);
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -62,16 +141,18 @@
             transition: all 0.2s ease;
         }
 
-        .new-conversation-btn:hover {
-            background-color: #f3f4f6;
-            border-color: #d1d5db;
-            color: #374151;
+        .new-conversation-btn:hover,
+        .theme-toggle-btn:hover {
+            background-color: var(--bg-secondary);
+            border-color: var(--border-hover);
+            color: var(--text-secondary);
         }
 
         .chat-container {
             flex: 1;
             overflow-y: auto;
-            background-color: #ffffff;
+            background-color: var(--bg-primary);
+            transition: background-color 0.2s ease;
         }
 
         .chat-wrapper {
@@ -87,7 +168,7 @@
             display: flex;
             justify-content: flex-start;
             margin-bottom: 0.5rem;
-            color: #0d0d0d;
+            color: var(--text-primary);
         }
 
         .message.assistant {
@@ -116,11 +197,11 @@
         }
 
         .message.assistant .message-content:hover {
-            background-color: #f9fafb;
+            background-color: var(--bg-secondary);
         }
 
         .message.user .message-content {
-            background-color: #f3f4f6;
+            background-color: var(--bg-secondary);
             border-radius: 1.25rem;
             padding: 0.8rem 1rem;
             max-width: 65%;
@@ -129,22 +210,23 @@
         }
 
         .message.user .message-content:hover {
-            background-color: #e5e7eb;
+            background-color: var(--bg-tertiary);
         }
 
         .message.console .message-content {
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
             font-size: 0.875rem;
-            background-color: #fafafa;
+            background-color: var(--bg-secondary);
             padding: 0.75rem 1rem;
-            color: #374151;
+            color: var(--text-secondary);
             max-width: 80%;
         }
 
         .input-container {
-            background-color: #ffffff;
+            background-color: var(--bg-primary);
             padding: 1rem;
-            padding-bottom: calc(1rem + env(safe-area-inset-bottom))
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+            transition: background-color 0.2s ease;
         }
 
         .input-wrapper {
@@ -158,25 +240,25 @@
         .chat-input {
             flex: 1;
             padding: 0.8rem 1rem;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--border-color);
             border-radius: 0.75rem;
-            background-color: #ffffff;
-            color: #111827;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             font-size: 1rem;
             line-height: 1.5;
             resize: none;
             outline: none;
             min-height: 54px;
             max-height: 200px;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
 
         .chat-input::placeholder {
-            color: #9ca3af;
+            color: var(--text-muted);
         }
 
         .chat-input:focus {
-            border-color: #2563eb;
+            border-color: var(--accent-hover);
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
@@ -185,10 +267,10 @@
             padding: 0;
             width: 54px;
             height: 54px;
-            border: 1px solid #111827;
+            border: 1px solid var(--accent-color);
             border-radius: 0.75rem;
-            background-color: #111827;
-            color: #ffffff;
+            background-color: var(--accent-color);
+            color: var(--bg-primary);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -197,20 +279,20 @@
         }
 
         .send-button:hover:not(:disabled) {
-            background-color: #2563eb;
-            border-color: #2563eb;
+            background-color: var(--accent-hover);
+            border-color: var(--accent-hover);
         }
 
         .send-button:disabled {
             cursor: not-allowed;
-            border-color: #d1d5db;
-            background-color: #e5e7eb;
-            color: #9ca3af;
+            border-color: var(--border-color);
+            background-color: var(--bg-tertiary);
+            color: var(--text-muted);
         }
 
         .typing-indicator {
             display: inline-block;
-            color: #6b7280;
+            color: var(--text-muted);
             letter-spacing: 0.15em;
         }
 
@@ -225,12 +307,134 @@
         }
 
         .error-message {
-            background-color: #fee2e2;
-            border: 1px solid #fecaca;
-            color: #b91c1c;
+            background-color: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
             padding: 0.75rem 1rem;
             border-radius: 0.75rem;
             margin-top: 0.5rem;
+        }
+
+        /* Settings Panel */
+        .settings-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            background-color: var(--bg-primary);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .settings-btn:hover {
+            background-color: var(--bg-secondary);
+            border-color: var(--border-hover);
+            color: var(--text-secondary);
+        }
+
+        .settings-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--overlay-bg);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .settings-overlay.active {
+            display: flex;
+        }
+
+        .settings-panel {
+            background-color: var(--bg-primary);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            max-width: 400px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+        }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .settings-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .settings-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.25rem;
+            color: var(--text-muted);
+        }
+
+        .settings-close:hover {
+            color: var(--text-primary);
+        }
+
+        .settings-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .settings-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .settings-value {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            float: right;
+        }
+
+        .settings-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--bg-tertiary);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .settings-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+        }
+
+        .settings-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: none;
         }
     </style>
 </head>
@@ -244,6 +448,63 @@
                 </svg>
             </button>
             <h1>nanochat</h1>
+        </div>
+        <div class="header-right">
+            <div class="model-info" id="modelInfo" style="display: none;">
+                <span id="modelType" class="model-info-badge">Dense</span>
+                <span id="modelParams">-</span>
+            </div>
+            <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark Mode" id="themeToggle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="sunIcon">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="moonIcon" style="display: none;">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+            <button class="settings-btn" onclick="openSettings()" title="Settings">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="settings-overlay" id="settingsOverlay" onclick="closeSettingsOnOverlay(event)">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button class="settings-close" onclick="closeSettings()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">
+                    Temperature
+                    <span class="settings-value" id="temperatureValue">0.8</span>
+                </label>
+                <input type="range" class="settings-slider" id="temperatureSlider" min="0" max="2" step="0.1" value="0.8" oninput="updateTemperature(this.value)">
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">
+                    Top-K
+                    <span class="settings-value" id="topKValue">50</span>
+                </label>
+                <input type="range" class="settings-slider" id="topKSlider" min="1" max="200" step="1" value="50" oninput="updateTopK(this.value)">
+            </div>
         </div>
     </div>
 
@@ -282,6 +543,90 @@
         let isGenerating = false;
         let currentTemperature = 0.8;
         let currentTopK = 50;
+
+        // Load settings from localStorage
+        function loadSettings() {
+            const savedTemp = localStorage.getItem('nanochat_temperature');
+            const savedTopK = localStorage.getItem('nanochat_topk');
+            if (savedTemp !== null) {
+                currentTemperature = parseFloat(savedTemp);
+            }
+            if (savedTopK !== null) {
+                currentTopK = parseInt(savedTopK);
+            }
+            updateSettingsUI();
+        }
+
+        function updateSettingsUI() {
+            document.getElementById('temperatureSlider').value = currentTemperature;
+            document.getElementById('temperatureValue').textContent = currentTemperature.toFixed(1);
+            document.getElementById('topKSlider').value = currentTopK;
+            document.getElementById('topKValue').textContent = currentTopK;
+        }
+
+        function updateTemperature(value) {
+            currentTemperature = parseFloat(value);
+            document.getElementById('temperatureValue').textContent = currentTemperature.toFixed(1);
+            localStorage.setItem('nanochat_temperature', currentTemperature);
+        }
+
+        function updateTopK(value) {
+            currentTopK = parseInt(value);
+            document.getElementById('topKValue').textContent = currentTopK;
+            localStorage.setItem('nanochat_topk', currentTopK);
+        }
+
+        function openSettings() {
+            updateSettingsUI();
+            document.getElementById('settingsOverlay').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsOverlay').classList.remove('active');
+        }
+
+        function closeSettingsOnOverlay(event) {
+            if (event.target.id === 'settingsOverlay') {
+                closeSettings();
+            }
+        }
+
+        // Load settings on page load
+        loadSettings();
+
+        // Dark mode functions
+        function initTheme() {
+            const savedTheme = localStorage.getItem('nanochat_theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+                document.documentElement.classList.add('dark');
+                updateThemeIcons(true);
+            } else {
+                updateThemeIcons(false);
+            }
+        }
+
+        function updateThemeIcons(isDark) {
+            const sunIcon = document.getElementById('sunIcon');
+            const moonIcon = document.getElementById('moonIcon');
+            if (isDark) {
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'block';
+            } else {
+                sunIcon.style.display = 'block';
+                moonIcon.style.display = 'none';
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('nanochat_theme', isDark ? 'dark' : 'light');
+            updateThemeIcons(isDark);
+        }
+
+        // Initialize theme on page load
+        initTheme();
 
         chatInput.addEventListener('input', function() {
             this.style.height = 'auto';
@@ -548,10 +893,50 @@
         // Autofocus the chat input on page load
         chatInput.focus();
 
+        // Fetch model info and display in header
+        async function fetchModelInfo() {
+            try {
+                const response = await fetch(`${API_URL}/info`);
+                const data = await response.json();
+                if (data.error) {
+                    console.error('Model info error:', data.error);
+                    return;
+                }
+                // Update model info display
+                const modelInfo = document.getElementById('modelInfo');
+                const modelType = document.getElementById('modelType');
+                const modelParams = document.getElementById('modelParams');
+
+                if (data.is_moe) {
+                    modelType.textContent = `MoE×${data.num_experts}`;
+                    modelType.classList.add('moe');
+                } else {
+                    modelType.textContent = 'Dense';
+                    modelType.classList.remove('moe');
+                }
+                modelParams.textContent = data.num_params_str;
+                modelInfo.style.display = 'flex';
+
+                // Update default settings from server
+                if (data.default_temperature !== undefined) {
+                    currentTemperature = data.default_temperature;
+                }
+                if (data.default_top_k !== undefined) {
+                    currentTopK = data.default_top_k;
+                }
+
+                console.log('Model info:', data);
+            } catch (error) {
+                console.error('Failed to fetch model info:', error);
+            }
+        }
+
         fetch(`${API_URL}/health`)
             .then(response => response.json())
             .then(data => {
                 console.log('Engine status:', data);
+                // Fetch model info after health check succeeds
+                fetchModelInfo();
             })
             .catch(error => {
                 console.error('Engine not available:', error);

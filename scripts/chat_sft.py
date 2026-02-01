@@ -213,10 +213,18 @@ for step in range(num_iterations):
 
     # evaluate the gradient
     num_tokens = torch.tensor(0, device=device) # the number of "active" tokens of supervision seen
+    total_aux_loss = 0.0
+    is_moe = model.config.num_experts > 1
     for micro_step in range(grad_accum_steps):
         train_inputs, train_targets = next(train_iter)
         with autocast_ctx:
-            loss = model(train_inputs, train_targets)
+            output = model(train_inputs, train_targets)
+            # Handle MoE aux_loss: model returns (loss, aux_loss) tuple for MoE
+            if is_moe:
+                loss, aux_loss = output
+                total_aux_loss += aux_loss.detach().item()
+            else:
+                loss = output
         train_loss = loss.detach() # for logging
         loss = loss / grad_accum_steps # each .backward() is a grad sum => normalize loss here
         loss.backward() # accumulate the gradient
@@ -238,13 +246,17 @@ for step in range(num_iterations):
     # logging
     train_loss_item = train_loss.item()
     num_tokens_item = num_tokens.item()
-    print0(f"Step {step:05d}/{num_iterations:05d} | Training loss: {train_loss_item:.6f}| lrm: {lrm:.6f}| num_tokens: {num_tokens_item:,}")
-    wandb_run.log({
+    aux_loss_str = f" | aux_loss: {total_aux_loss/grad_accum_steps:.6f}" if is_moe else ""
+    print0(f"Step {step:05d}/{num_iterations:05d} | Training loss: {train_loss_item:.6f}{aux_loss_str} | lrm: {lrm:.6f} | num_tokens: {num_tokens_item:,}")
+    log_dict = {
         "step": step,
         "lrm": lrm,
         "train_loss": train_loss_item,
         "num_tokens": num_tokens_item,
-    })
+    }
+    if is_moe:
+        log_dict["aux_loss"] = total_aux_loss / grad_accum_steps
+    wandb_run.log(log_dict)
     step += 1
 
 # Save the model at the end of the run

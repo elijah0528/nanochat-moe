@@ -31,6 +31,10 @@ class GPTConfig:
     n_head: int = 6 # number of query heads
     n_kv_head: int = 6 # number of key/value heads (MQA)
     n_embd: int = 768
+    # MoE configuration
+    num_experts: int = 1  # Number of experts (1 = dense model, >1 = MoE)
+    num_experts_per_tok: int = 2  # Top-k experts activated per token
+    moe_aux_loss_coef: float = 0.01  # Load balancing auxiliary loss coefficient
 
 
 def norm(x):
@@ -123,6 +127,127 @@ class MLP(nn.Module):
         return x
 
 
+class Router(nn.Module):
+    """
+    Routes tokens to top-k experts with load balancing auxiliary loss.
+    Returns router weights and auxiliary loss for load balancing.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.gate = nn.Linear(config.n_embd, config.num_experts, bias=False)
+
+    def forward(self, x):
+        # x: (B, T, C) -> router_logits: (B, T, num_experts)
+        router_logits = self.gate(x)
+        router_probs = F.softmax(router_logits, dim=-1)
+
+        # Select top-k experts per token
+        top_k_probs, top_k_indices = torch.topk(router_probs, self.num_experts_per_tok, dim=-1)
+        # Normalize the top-k probabilities to sum to 1
+        top_k_probs = top_k_probs / top_k_probs.sum(dim=-1, keepdim=True)
+
+        # Compute auxiliary load balancing loss
+        # This encourages balanced expert utilization
+        # aux_loss = num_experts * sum_i(f_i * P_i) where:
+        #   f_i = fraction of tokens routed to expert i
+        #   P_i = average probability assigned to expert i
+        if self.training:
+            # f_i: fraction of tokens where expert i is in top-k
+            # We use a soft version: sum of top-k indicator / total tokens
+            B, T, _ = x.shape
+            num_tokens = B * T
+
+            # Create expert mask: (B, T, num_experts) with 1s where expert is selected
+            expert_mask = torch.zeros_like(router_probs)
+            expert_mask.scatter_(-1, top_k_indices, 1.0)
+
+            # f_i = mean of expert_mask over all tokens for each expert
+            tokens_per_expert = expert_mask.sum(dim=(0, 1))  # (num_experts,)
+            f = tokens_per_expert / num_tokens  # fraction of tokens per expert
+
+            # P_i = mean router probability for each expert
+            P = router_probs.mean(dim=(0, 1))  # (num_experts,)
+
+            # Auxiliary loss: encourages f and P to be uniform (1/num_experts each)
+            aux_loss = self.num_experts * (f * P).sum()
+        else:
+            aux_loss = torch.tensor(0.0, device=x.device)
+
+        return top_k_probs, top_k_indices, aux_loss
+
+
+class SparseMoE(nn.Module):
+    """
+    Sparse Mixture of Experts layer that replaces the standard MLP.
+    Routes each token to top-k experts and combines their outputs.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.moe_aux_loss_coef = config.moe_aux_loss_coef
+
+        # Create expert MLPs
+        self.experts = nn.ModuleList([MLP(config) for _ in range(config.num_experts)])
+        # Router for selecting experts
+        self.router = Router(config)
+
+    def forward(self, x):
+        # x: (B, T, C)
+        B, T, C = x.shape
+
+        # Get routing weights and indices
+        top_k_probs, top_k_indices, aux_loss = self.router(x)
+        # top_k_probs: (B, T, num_experts_per_tok)
+        # top_k_indices: (B, T, num_experts_per_tok)
+
+        # Flatten batch and sequence dimensions for efficient processing
+        x_flat = x.view(-1, C)  # (B*T, C)
+        top_k_probs_flat = top_k_probs.view(-1, self.num_experts_per_tok)  # (B*T, k)
+        top_k_indices_flat = top_k_indices.view(-1, self.num_experts_per_tok)  # (B*T, k)
+
+        # Compute expert outputs for selected experts only
+        # We'll accumulate weighted outputs
+        output_flat = torch.zeros_like(x_flat)  # (B*T, C)
+
+        # Process each expert
+        for expert_idx in range(self.num_experts):
+            # Find which tokens selected this expert and in which top-k position
+            expert_mask = (top_k_indices_flat == expert_idx)  # (B*T, k)
+
+            if not expert_mask.any():
+                continue
+
+            # Get the tokens that should go to this expert
+            # A token might select this expert in multiple top-k positions (unlikely but possible)
+            token_selected = expert_mask.any(dim=-1)  # (B*T,)
+            selected_tokens = x_flat[token_selected]  # (num_selected, C)
+
+            if selected_tokens.shape[0] == 0:
+                continue
+
+            # Compute expert output for selected tokens
+            expert_output = self.experts[expert_idx](selected_tokens)  # (num_selected, C)
+
+            # Get the weights for this expert for each token
+            # Sum weights across top-k positions where this expert was selected
+            expert_weights = (top_k_probs_flat * expert_mask.float()).sum(dim=-1)  # (B*T,)
+            selected_weights = expert_weights[token_selected].unsqueeze(-1)  # (num_selected, 1)
+
+            # Accumulate weighted output
+            output_flat[token_selected] += expert_output * selected_weights
+
+        # Reshape output back to (B, T, C)
+        output = output_flat.view(B, T, C)
+
+        # Scale auxiliary loss by coefficient
+        aux_loss = aux_loss * self.moe_aux_loss_coef
+
+        return output, aux_loss
+
+
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -132,16 +257,32 @@ class Block(nn.Module):
     def forward(self, x, cos_sin, kv_cache):
         x = x + self.attn(norm(x), cos_sin, kv_cache)
         x = x + self.mlp(norm(x))
-        return x
+        return x, torch.tensor(0.0, device=x.device)  # No aux loss for dense block
+
+
+class MoEBlock(nn.Module):
+    """Transformer block with Mixture of Experts instead of standard MLP."""
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        self.attn = CausalSelfAttention(config, layer_idx)
+        self.moe = SparseMoE(config)
+
+    def forward(self, x, cos_sin, kv_cache):
+        x = x + self.attn(norm(x), cos_sin, kv_cache)
+        moe_out, aux_loss = self.moe(norm(x))
+        x = x + moe_out
+        return x, aux_loss
 
 
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        # Choose block type based on MoE configuration
+        BlockClass = MoEBlock if config.num_experts > 1 else Block
         self.transformer = nn.ModuleDict({
             "wte": nn.Embedding(config.vocab_size, config.n_embd),
-            "h": nn.ModuleList([Block(config, layer_idx) for layer_idx in range(config.n_layer)]),
+            "h": nn.ModuleList([BlockClass(config, layer_idx) for layer_idx in range(config.n_layer)]),
         })
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         # To support meta device initialization, we init the rotary embeddings here, but it's fake
@@ -158,10 +299,18 @@ class GPT(nn.Module):
         self.apply(self._init_weights)
         # zero out classifier weights
         torch.nn.init.zeros_(self.lm_head.weight)
-        # zero out c_proj weights in all blocks
+        # zero out c_proj weights in all blocks (handles both dense and MoE)
         for block in self.transformer.h:
-            torch.nn.init.zeros_(block.mlp.c_proj.weight)
             torch.nn.init.zeros_(block.attn.c_proj.weight)
+            if self.config.num_experts > 1:
+                # MoE block: zero out c_proj for all experts
+                for expert in block.moe.experts:
+                    torch.nn.init.zeros_(expert.c_proj.weight)
+                # Initialize router with small variance for balanced initial routing
+                torch.nn.init.normal_(block.moe.router.gate.weight, mean=0.0, std=0.01)
+            else:
+                # Dense block
+                torch.nn.init.zeros_(block.mlp.c_proj.weight)
         # init the rotary embeddings
         head_dim = self.config.n_embd // self.config.n_head
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
@@ -203,22 +352,57 @@ class GPT(nn.Module):
         return self.transformer.wte.weight.device
 
     def estimate_flops(self):
-        """ Return the estimated FLOPs per token for the model. Ref: https://arxiv.org/abs/2204.02311 """
-        nparams = sum(p.numel() for p in self.parameters())
-        nparams_embedding = self.transformer.wte.weight.numel()
+        """
+        Return the estimated FLOPs per token for the model. Ref: https://arxiv.org/abs/2204.02311
+        For MoE models, we account for sparsity: only num_experts_per_tok experts are activated.
+        """
         l, h, q, t = self.config.n_layer, self.config.n_head, self.config.n_embd // self.config.n_head, self.config.sequence_len
-        num_flops_per_token = 6 * (nparams - nparams_embedding) + 12 * l * h * q * t
+        nparams_embedding = self.transformer.wte.weight.numel()
+        nparams_lm_head = self.lm_head.weight.numel()
+
+        if self.config.num_experts > 1:
+            # MoE model: count active parameters (attention + activated experts)
+            # Attention params per layer
+            attn_params_per_layer = sum(p.numel() for p in self.transformer.h[0].attn.parameters())
+            # Expert MLP params per expert
+            expert_params = sum(p.numel() for p in self.transformer.h[0].moe.experts[0].parameters())
+            # Router params per layer (small, negligible but include for completeness)
+            router_params = sum(p.numel() for p in self.transformer.h[0].moe.router.parameters())
+            # Active params per layer = attention + (activated experts * expert params) + router
+            active_params_per_layer = attn_params_per_layer + (self.config.num_experts_per_tok * expert_params) + router_params
+            nparams_active = l * active_params_per_layer + nparams_lm_head
+            num_flops_per_token = 6 * nparams_active + 12 * l * h * q * t
+        else:
+            # Dense model: original calculation
+            nparams = sum(p.numel() for p in self.parameters())
+            num_flops_per_token = 6 * (nparams - nparams_embedding) + 12 * l * h * q * t
+
         return num_flops_per_token
 
-    def setup_optimizers(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0):
+    def setup_optimizers(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0, router_lr=0.01):
         model_dim = self.config.n_embd
         ddp, rank, local_rank, world_size = get_dist_info()
-        # Separate out all parameters into 3 groups (matrix, embedding, lm_head)
-        matrix_params = list(self.transformer.h.parameters())
+        # Separate out all parameters into groups
+        # For MoE: router params go with AdamW, expert MLP params go with Muon
+        matrix_params = []
+        router_params = []
+        for block in self.transformer.h:
+            # Attention params always go to Muon
+            matrix_params.extend(list(block.attn.parameters()))
+            if self.config.num_experts > 1:
+                # MoE block: router to AdamW, experts to Muon
+                router_params.extend(list(block.moe.router.parameters()))
+                for expert in block.moe.experts:
+                    matrix_params.extend(list(expert.parameters()))
+            else:
+                # Dense block: MLP to Muon
+                matrix_params.extend(list(block.mlp.parameters()))
         embedding_params = list(self.transformer.wte.parameters())
         lm_head_params = list(self.lm_head.parameters())
-        assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params)
-        # Create the AdamW optimizer for the embedding and lm_head
+        # Verify we haven't missed any parameters
+        total_param_count = len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(router_params)
+        assert len(list(self.parameters())) == total_param_count, f"Parameter count mismatch: {len(list(self.parameters()))} != {total_param_count}"
+        # Create the AdamW optimizer for the embedding, lm_head, and router (if MoE)
         # Scale the LR for the AdamW parameters by ∝1/√dmodel (having tuned the LRs for 768 dim model)
         dmodel_lr_scale = (model_dim / 768) ** -0.5
         if rank == 0:
@@ -227,6 +411,9 @@ class GPT(nn.Module):
             dict(params=lm_head_params, lr=unembedding_lr * dmodel_lr_scale),
             dict(params=embedding_params, lr=embedding_lr * dmodel_lr_scale),
         ]
+        # Add router params to AdamW if MoE is enabled
+        if router_params:
+            adam_groups.append(dict(params=router_params, lr=router_lr * dmodel_lr_scale))
         adamw_kwargs = dict(betas=(0.8, 0.95), eps=1e-10, weight_decay=weight_decay)
         AdamWFactory = DistAdamW if ddp else partial(torch.optim.AdamW, fused=True)
         adamw_optimizer = AdamWFactory(adam_groups, **adamw_kwargs)
@@ -255,8 +442,10 @@ class GPT(nn.Module):
         # Forward the trunk of the Transformer
         x = self.transformer.wte(idx)
         x = norm(x)
+        total_aux_loss = torch.tensor(0.0, device=idx.device)
         for block in self.transformer.h:
-            x = block(x, cos_sin, kv_cache)
+            x, aux_loss = block(x, cos_sin, kv_cache)
+            total_aux_loss = total_aux_loss + aux_loss
         x = norm(x)
 
         # Forward the lm_head (compute logits)
@@ -268,6 +457,10 @@ class GPT(nn.Module):
             logits = softcap * torch.tanh(logits / softcap) # logits softcap
             logits = logits.float() # use tf32/fp32 for logits
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
+            # Add auxiliary loss for MoE load balancing (averaged over layers)
+            if self.config.num_experts > 1:
+                aux_loss = total_aux_loss / self.config.n_layer
+                return loss, aux_loss
             return loss
         else:
             # inference mode: compute and return the logits
