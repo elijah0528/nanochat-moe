@@ -178,6 +178,76 @@ class Router(nn.Module):
         return top_k_probs, top_k_indices, aux_loss
 
 
+class SparseMoE(nn.Module):
+    """
+    Sparse Mixture of Experts layer that replaces the standard MLP.
+    Routes each token to top-k experts and combines their outputs.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.moe_aux_loss_coef = config.moe_aux_loss_coef
+
+        # Create expert MLPs
+        self.experts = nn.ModuleList([MLP(config) for _ in range(config.num_experts)])
+        # Router for selecting experts
+        self.router = Router(config)
+
+    def forward(self, x):
+        # x: (B, T, C)
+        B, T, C = x.shape
+
+        # Get routing weights and indices
+        top_k_probs, top_k_indices, aux_loss = self.router(x)
+        # top_k_probs: (B, T, num_experts_per_tok)
+        # top_k_indices: (B, T, num_experts_per_tok)
+
+        # Flatten batch and sequence dimensions for efficient processing
+        x_flat = x.view(-1, C)  # (B*T, C)
+        top_k_probs_flat = top_k_probs.view(-1, self.num_experts_per_tok)  # (B*T, k)
+        top_k_indices_flat = top_k_indices.view(-1, self.num_experts_per_tok)  # (B*T, k)
+
+        # Compute expert outputs for selected experts only
+        # We'll accumulate weighted outputs
+        output_flat = torch.zeros_like(x_flat)  # (B*T, C)
+
+        # Process each expert
+        for expert_idx in range(self.num_experts):
+            # Find which tokens selected this expert and in which top-k position
+            expert_mask = (top_k_indices_flat == expert_idx)  # (B*T, k)
+
+            if not expert_mask.any():
+                continue
+
+            # Get the tokens that should go to this expert
+            # A token might select this expert in multiple top-k positions (unlikely but possible)
+            token_selected = expert_mask.any(dim=-1)  # (B*T,)
+            selected_tokens = x_flat[token_selected]  # (num_selected, C)
+
+            if selected_tokens.shape[0] == 0:
+                continue
+
+            # Compute expert output for selected tokens
+            expert_output = self.experts[expert_idx](selected_tokens)  # (num_selected, C)
+
+            # Get the weights for this expert for each token
+            # Sum weights across top-k positions where this expert was selected
+            expert_weights = (top_k_probs_flat * expert_mask.float()).sum(dim=-1)  # (B*T,)
+            selected_weights = expert_weights[token_selected].unsqueeze(-1)  # (num_selected, 1)
+
+            # Accumulate weighted output
+            output_flat[token_selected] += expert_output * selected_weights
+
+        # Reshape output back to (B, T, C)
+        output = output_flat.view(B, T, C)
+
+        # Scale auxiliary loss by coefficient
+        aux_loss = aux_loss * self.moe_aux_loss_coef
+
+        return output, aux_loss
+
+
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
