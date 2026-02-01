@@ -27,12 +27,21 @@
         .header {
             background-color: #ffffff;
             padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .header-left {
             display: flex;
             align-items: center;
             gap: 0.75rem;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
 
         .header-logo {
@@ -45,6 +54,30 @@
             font-weight: 600;
             margin: 0;
             color: #111827;
+        }
+
+        .model-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+            background-color: #f3f4f6;
+            padding: 0.375rem 0.75rem;
+            border-radius: 1rem;
+        }
+
+        .model-info-badge {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.75rem;
+            font-weight: 500;
+        }
+
+        .model-info-badge.moe {
+            background-color: #fef3c7;
+            color: #92400e;
         }
 
         .new-conversation-btn {
@@ -244,6 +277,12 @@
                 </svg>
             </button>
             <h1>nanochat</h1>
+        </div>
+        <div class="header-right">
+            <div class="model-info" id="modelInfo" style="display: none;">
+                <span id="modelType" class="model-info-badge">Dense</span>
+                <span id="modelParams">-</span>
+            </div>
         </div>
     </div>
 
@@ -548,10 +587,50 @@
         // Autofocus the chat input on page load
         chatInput.focus();
 
+        // Fetch model info and display in header
+        async function fetchModelInfo() {
+            try {
+                const response = await fetch(`${API_URL}/info`);
+                const data = await response.json();
+                if (data.error) {
+                    console.error('Model info error:', data.error);
+                    return;
+                }
+                // Update model info display
+                const modelInfo = document.getElementById('modelInfo');
+                const modelType = document.getElementById('modelType');
+                const modelParams = document.getElementById('modelParams');
+
+                if (data.is_moe) {
+                    modelType.textContent = `MoE×${data.num_experts}`;
+                    modelType.classList.add('moe');
+                } else {
+                    modelType.textContent = 'Dense';
+                    modelType.classList.remove('moe');
+                }
+                modelParams.textContent = data.num_params_str;
+                modelInfo.style.display = 'flex';
+
+                // Update default settings from server
+                if (data.default_temperature !== undefined) {
+                    currentTemperature = data.default_temperature;
+                }
+                if (data.default_top_k !== undefined) {
+                    currentTopK = data.default_top_k;
+                }
+
+                console.log('Model info:', data);
+            } catch (error) {
+                console.error('Failed to fetch model info:', error);
+            }
+        }
+
         fetch(`${API_URL}/health`)
             .then(response => response.json())
             .then(data => {
                 console.log('Engine status:', data);
+                // Fetch model info after health check succeeds
+                fetchModelInfo();
             })
             .catch(error => {
                 console.error('Engine not available:', error);
