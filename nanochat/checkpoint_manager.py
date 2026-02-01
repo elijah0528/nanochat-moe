@@ -1,5 +1,10 @@
 """
 Utilities for saving and loading model/optim/state checkpoints.
+
+MoE Support:
+- MoE configuration (num_experts, num_experts_per_tok, moe_aux_loss_coef) is saved in model_config
+- Old dense checkpoints are backward compatible: missing MoE fields use defaults (num_experts=1)
+- MoE checkpoints save expert weights in state_dict under moe.experts[i].* paths
 """
 import os
 import re
