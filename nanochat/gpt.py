@@ -31,6 +31,10 @@ class GPTConfig:
     n_head: int = 6 # number of query heads
     n_kv_head: int = 6 # number of key/value heads (MQA)
     n_embd: int = 768
+    # MoE configuration
+    num_experts: int = 1  # Number of experts (1 = dense model, >1 = MoE)
+    num_experts_per_tok: int = 2  # Top-k experts activated per token
+    moe_aux_loss_coef: float = 0.01  # Load balancing auxiliary loss coefficient
 
 
 def norm(x):
