@@ -278,9 +278,11 @@ class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        # Choose block type based on MoE configuration
+        BlockClass = MoEBlock if config.num_experts > 1 else Block
         self.transformer = nn.ModuleDict({
             "wte": nn.Embedding(config.vocab_size, config.n_embd),
-            "h": nn.ModuleList([Block(config, layer_idx) for layer_idx in range(config.n_layer)]),
+            "h": nn.ModuleList([BlockClass(config, layer_idx) for layer_idx in range(config.n_layer)]),
         })
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         # To support meta device initialization, we init the rotary embeddings here, but it's fake
@@ -394,8 +396,10 @@ class GPT(nn.Module):
         # Forward the trunk of the Transformer
         x = self.transformer.wte(idx)
         x = norm(x)
+        total_aux_loss = torch.tensor(0.0, device=idx.device)
         for block in self.transformer.h:
-            x = block(x, cos_sin, kv_cache)
+            x, aux_loss = block(x, cos_sin, kv_cache)
+            total_aux_loss = total_aux_loss + aux_loss
         x = norm(x)
 
         # Forward the lm_head (compute logits)
@@ -407,6 +411,10 @@ class GPT(nn.Module):
             logits = softcap * torch.tanh(logits / softcap) # logits softcap
             logits = logits.float() # use tf32/fp32 for logits
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
+            # Add auxiliary loss for MoE load balancing (averaged over layers)
+            if self.config.num_experts > 1:
+                aux_loss = total_aux_loss / self.config.n_layer
+                return loss, aux_loss
             return loss
         else:
             # inference mode: compute and return the logits
