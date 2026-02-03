@@ -30,6 +30,14 @@ See the [screen cheatsheet](https://gist.github.com/jctosta/af918e1618682638aa82
 python -m scripts.chat_web
 ```
 
+Note: `speedrun.sh` already installs `uv` (if needed), creates `.venv`, and runs `uv sync --extra gpu`. If you're starting fresh without running `speedrun.sh`, you can do the equivalent setup with:
+
+```bash
+uv venv
+uv sync --extra gpu
+source .venv/bin/activate
+```
+
 And then visit the URL shown. Make sure to access it correctly, e.g. on Lambda use the public IP of the node you're on, followed by the port, so for example [http://209.20.xxx.xxx:8000/](http://209.20.xxx.xxx:8000/), etc. Then talk to your LLM as you'd normally talk to ChatGPT! Get it to write stories or poems. Ask it to tell you who you are to see a hallucination. Ask it why the sky is blue. Or why it's green. The speedrun is a 4e19 FLOPs capability model so it's a bit like talking to a kindergartener :).
 
 ---
