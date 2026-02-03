@@ -6,6 +6,13 @@
 
 This repo is a full-stack implementation of an LLM like ChatGPT in a single, clean, minimal, hackable, dependency-lite codebase. nanochat is designed to run on a single 8XH100 node via scripts like [speedrun.sh](speedrun.sh), that run the entire pipeline start to end. This includes tokenization, pretraining, finetuning, evaluation, inference, and web serving over a simple UI so that you can talk to your own LLM just like ChatGPT. nanochat will become the capstone project of the course LLM101n being developed by Eureka Labs.
 
+## Prerequisites
+
+- Python >= 3.10 (see `.python-version`)
+- `uv` for dependency management (the scripts will install it automatically if missing)
+- Rust toolchain (Cargo) if you want to build the `rustbpe` tokenizer extension (the scripts install Rust automatically)
+- GPU strongly recommended for the full training runs; CPU/MPS can run smaller/debug runs (see "Running on CPU / MPS" below)
+
 ## Talk to it
 
 To get a sense of the endpoint of this repo, you can currently find [nanochat d32](https://github.com/karpathy/nanochat/discussions/8) hosted on [nanochat.karpathy.ai](https://nanochat.karpathy.ai/). "d32" means that this model has 32 layers in the Transformer neural network. This model has 1.9 billion parameters, it was trained on 38 billion tokens by simply running the single script [run1000.sh](run1000.sh), and the total cost of training was ~$800 (about 33 hours training time on 8XH100 GPU node). While today this is enough to outperform GPT-2 of 2019, it falls dramatically short of modern Large Language Models like GPT-5. When talking to these micro models, you'll see that they make a lot of mistakes, they are a little bit naive and silly and they hallucinate a ton, a bit like children. It's kind of amusing. But what makes nanochat unique is that it is fully yours - fully configurable, tweakable, hackable, and trained by you from start to end. To train and talk to your own, we turn to...
@@ -28,6 +35,14 @@ See the [screen cheatsheet](https://gist.github.com/jctosta/af918e1618682638aa82
 
 ```bash
 python -m scripts.chat_web
+```
+
+Note: `speedrun.sh` already installs `uv` (if needed), creates `.venv`, and runs `uv sync --extra gpu`. If you're starting fresh without running `speedrun.sh`, you can do the equivalent setup with:
+
+```bash
+uv venv
+uv sync --extra gpu
+source .venv/bin/activate
 ```
 
 And then visit the URL shown. Make sure to access it correctly, e.g. on Lambda use the public IP of the node you're on, followed by the port, so for example [http://209.20.xxx.xxx:8000/](http://209.20.xxx.xxx:8000/), etc. Then talk to your LLM as you'd normally talk to ChatGPT! Get it to write stories or poems. Ask it to tell you who you are to see a hallucination. Ask it why the sky is blue. Or why it's green. The speedrun is a 4e19 FLOPs capability model so it's a bit like talking to a kindergartener :).
@@ -117,7 +132,17 @@ Alternatively, I recommend using [DeepWiki](https://deepwiki.com/karpathy/nanoch
 
 ## Tests
 
-I haven't invested too much here but some tests exist, especially for the tokenizer. Run e.g. as:
+I haven't invested too much here but some tests exist, especially for the tokenizer.
+
+To run the full test suite (after setting up deps), you can do:
+
+```bash
+uv sync --extra cpu
+source .venv/bin/activate
+python -m pytest -v
+```
+
+Or, to just run the tokenizer test directly:
 
 ```bash
 python -m pytest tests/test_rustbpe.py -v -s
