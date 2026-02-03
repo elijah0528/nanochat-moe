@@ -14,6 +14,34 @@ To get a sense of the endpoint of this repo, you can currently find [nanochat d3
 
 The fastest way to feel the magic is to run the speedrun script [speedrun.sh](speedrun.sh), which trains and inferences the $100 tier of nanochat. On an 8XH100 node at $24/hr, this gives a total run time of about 4 hours. Boot up a new 8XH100 GPU box from your favorite provider (e.g. I use and like [Lambda](https://lambda.ai/service/gpu-cloud)), and kick off the training script:
 
+### Local setup (recommended)
+
+This repo uses Python 3.10+ and is set up for [`uv`](https://github.com/astral-sh/uv).
+
+1) Create a virtualenv and install dependencies:
+
+```bash
+uv sync --extra cpu
+```
+
+If you're on a CUDA machine and want the CUDA wheels for PyTorch:
+
+```bash
+uv sync --extra gpu
+```
+
+This creates a local `.venv/` by default.
+
+2) Build/install the Rust tokenizer extension (`rustbpe`) into the environment (required for tokenizer training/eval). You'll need a Rust toolchain available (e.g. via `rustup`):
+
+```bash
+uv run maturin develop
+```
+
+You can now run commands either by activating the venv (`source .venv/bin/activate`) or prefixing with `uv run ...`.
+
+### Run the speedrun (8x H100)
+
 ```bash
 bash speedrun.sh
 ```
@@ -24,10 +52,10 @@ Alternatively, since the script runs for 4 hours, I like to launch it like this 
 screen -L -Logfile speedrun.log -S speedrun bash speedrun.sh
 ```
 
-See the [screen cheatsheet](https://gist.github.com/jctosta/af918e1618682638aa82) if you are less familiar. You can watch it go inside the screen session, or detach with `Ctrl-a d` and `tail speedrun.log` to view progress. Now wait 4 hours. Once it's done, you can talk to your LLM via the ChatGPT-like web UI. Make sure again that your local uv virtual environment is active (run `source .venv/bin/activate`), and serve it:
+See the [screen cheatsheet](https://gist.github.com/jctosta/af918e1618682638aa82) if you are less familiar. You can watch it go inside the screen session, or detach with `Ctrl-a d` and `tail speedrun.log` to view progress. Now wait 4 hours. Once it's done, you can talk to your LLM via the ChatGPT-like web UI. Make sure your virtual environment is active (or use `uv run ...`), and serve it:
 
 ```bash
-python -m scripts.chat_web
+uv run python -m scripts.chat_web
 ```
 
 And then visit the URL shown. Make sure to access it correctly, e.g. on Lambda use the public IP of the node you're on, followed by the port, so for example [http://209.20.xxx.xxx:8000/](http://209.20.xxx.xxx:8000/), etc. Then talk to your LLM as you'd normally talk to ChatGPT! Get it to write stories or poems. Ask it to tell you who you are to see a hallucination. Ask it why the sky is blue. Or why it's green. The speedrun is a 4e19 FLOPs capability model so it's a bit like talking to a kindergartener :).
@@ -120,7 +148,23 @@ Alternatively, I recommend using [DeepWiki](https://deepwiki.com/karpathy/nanoch
 I haven't invested too much here but some tests exist, especially for the tokenizer. Run e.g. as:
 
 ```bash
-python -m pytest tests/test_rustbpe.py -v -s
+uv run python -m pytest tests/test_rustbpe.py -v -s
+```
+
+## Common commands
+
+```bash
+# run web UI (after you've trained / downloaded a model checkpoint)
+uv run python -m scripts.chat_web
+
+# talk to a model over CLI
+uv run python -m scripts.chat_cli
+
+# run tests
+uv run python -m pytest -q
+
+# build the rust tokenizer extension
+uv run maturin develop
 ```
 
 ## File structure
