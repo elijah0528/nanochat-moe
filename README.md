@@ -14,6 +14,34 @@ To get a sense of the endpoint of this repo, you can currently find [nanochat d3
 
 The fastest way to feel the magic is to run the speedrun script [speedrun.sh](speedrun.sh), which trains and inferences the $100 tier of nanochat. On an 8XH100 node at $24/hr, this gives a total run time of about 4 hours. Boot up a new 8XH100 GPU box from your favorite provider (e.g. I use and like [Lambda](https://lambda.ai/service/gpu-cloud)), and kick off the training script:
 
+### Local setup (recommended)
+
+This repo uses Python 3.10+ and is set up for [`uv`](https://github.com/astral-sh/uv).
+
+1) Create a virtualenv and install dependencies:
+
+```bash
+uv sync --extra cpu
+```
+
+If you're on a CUDA machine and want the CUDA wheels for PyTorch:
+
+```bash
+uv sync --extra gpu
+```
+
+This creates a local `.venv/` by default.
+
+2) Build/install the Rust tokenizer extension (`rustbpe`) into the environment (required for tokenizer training/eval). You'll need a Rust toolchain available (e.g. via `rustup`):
+
+```bash
+uv run maturin develop
+```
+
+You can now run commands either by activating the venv (`source .venv/bin/activate`) or prefixing with `uv run ...`.
+
+### Run the speedrun (8x H100)
+
 ```bash
 bash speedrun.sh
 ```
