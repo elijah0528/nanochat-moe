@@ -151,6 +151,22 @@ I haven't invested too much here but some tests exist, especially for the tokeni
 uv run python -m pytest tests/test_rustbpe.py -v -s
 ```
 
+## Common commands
+
+```bash
+# run web UI (after you've trained / downloaded a model checkpoint)
+uv run python -m scripts.chat_web
+
+# talk to a model over CLI
+uv run python -m scripts.chat_cli
+
+# run tests
+uv run python -m pytest -q
+
+# build the rust tokenizer extension
+uv run maturin develop
+```
+
 ## File structure
 
 ```
