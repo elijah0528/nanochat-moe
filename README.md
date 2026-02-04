@@ -219,3 +219,5 @@ If you find nanochat helpful in your research cite simply as:
 ## License
 
 MIT
+
+Operational check: README updated by Cursor Cloud Agent.
