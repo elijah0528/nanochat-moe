@@ -1,5 +1,7 @@
 # nanochat
 
+Minimal full-stack ChatGPT-style LLM codebase.
+
 ![nanochat logo](dev/nanochat.png)
 
 > The best ChatGPT that $100 can buy.
