@@ -222,3 +222,4 @@ MIT
 
 Operational check: README updated by Cursor Cloud Agent.
 Operational check: second README line added by Cursor Cloud Agent.
+Operational check: third README line added by Cursor Cloud Agent.
