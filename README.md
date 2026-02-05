@@ -123,6 +123,12 @@ I haven't invested too much here but some tests exist, especially for the tokeni
 python -m pytest tests/test_rustbpe.py -v -s
 ```
 
+If you're iterating on inference behavior, it's also useful to run the engine test:
+
+```bash
+python -m pytest tests/test_engine.py -v -s
+```
+
 ## File structure
 
 ```
