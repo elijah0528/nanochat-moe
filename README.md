@@ -64,6 +64,14 @@ Total wall clock time: 3h51m
 
 (Your table might be missing the RL number by default). For a lot more information around the speedrun script and what to look for and expect, please refer to the walkthrough that I posted in Discussions of the repo: ["Introducing nanochat: The best ChatGPT that $100 can buy"](https://github.com/karpathy/nanochat/discussions/1).
 
+## Key scripts
+
+- `speedrun.sh`: end-to-end $100 tier training run.
+- `run1000.sh`: $1000 tier d32 training run.
+- `python -m scripts.chat_web`: launch the ChatGPT-like web UI.
+- `python -m scripts.chat_cli`: chat with the model in the terminal.
+- `python -m scripts.base_train`: base model pretraining entrypoint.
+
 ## Bigger models
 
 Unsurprisingly, $100 is not enough to train a highly performant ChatGPT clone. In fact, LLMs are famous for their multi-million dollar capex. For our purposes, I think there are two more scales of interest. First is the ~$300 tier d26 model (i.e. depth=26) that trains in ~12 hours, which slightly outperforms GPT-2 CORE score. Second is the $1000 tier (~41.6 hours), just because it's a nice round number. But both of these are not yet fully supported and therefore not attached here in the master branch yet.
